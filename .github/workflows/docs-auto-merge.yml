@@ -1,0 +1,32 @@
+name: Docs auto-merge
+
+# A ready PR that changes only documentation merges by itself (squash) once "CI required" passes; see
+# tools/pr-automation/docs-auto-merge.mjs for what counts as documentation and the `no-auto-merge` opt-out.
+# pull_request_target runs main's copy of the workflow and the script; the PR's code is never checked out.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  group: docs-auto-merge-${{ github.event.pull_request.number }}
+
+jobs:
+  auto-merge:
+    name: Docs auto-merge
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: node tools/pr-automation/docs-auto-merge.mjs "$PR"

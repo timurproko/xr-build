@@ -11,6 +11,7 @@
     "check:names": "node tools/name-guard/name-guard.mjs check",
     "names": "node tools/name-guard/name-guard.mjs",
     "hooks": "git config core.hooksPath .githooks",
+    "worktree": "node tools/worktree/worktree.mjs",
     "panel": "node packages/control-panel/src/server.ts --open",
     "test": "pnpm -r --if-present test",
     "preview:readme": "node tools/preview-readme/preview-readme.mjs"

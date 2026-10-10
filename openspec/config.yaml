@@ -6,3 +6,5 @@ context: |
   Describe roles instead ("a 3D display", "a hand tracker", "a station platform", "the platform's packager") and use
   made-up example names (`stereo-panel`, `tracker`, `station`). Plugins and projects live in the user's workspace,
   outside this repo; plan them there, not here. `pnpm check:names` must pass on every change.
+  A change ships in the PR that implements it: its folder rides in that PR and is archived there
+  (`openspec archive <change> --yes`) before the PR is ready, so main gets the code and the synced specs together.

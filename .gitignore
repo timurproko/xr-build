@@ -1,4 +1,6 @@
 node_modules/
+# task worktrees (pnpm worktree)
+.worktrees/
 dist/
 build/
 builds/
