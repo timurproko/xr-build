@@ -228,7 +228,7 @@ pnpm test
 ```
 
 Keep names out of the core: no vendor, product, client or person names in code, identifiers, constants,
-paths, package names, docs or specs (the rule in `CLAUDE.md` and `openspec/config.yaml`). `pnpm check:names`
+paths, package names, docs or specs (the rule in `.claude/CLAUDE.md` and `openspec/config.yaml`). `pnpm check:names`
 enforces it: it fails when a tracked file, path or package name holds a banned name. The banned names exist
 only as hashes (`tools/name-guard/banned.sha256`), never as a plain list. `pnpm names add <name>` bans one more
 (`--exact` for a name whose lower-case form is an ordinary word); commit the changed hash file. Enable the

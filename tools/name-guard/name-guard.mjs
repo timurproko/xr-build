@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Name guard: the core repo names no vendor, product, client or other private name (the rule: CLAUDE.md,
+// Name guard: the core repo names no vendor, product, client or other private name (the rule: .claude/CLAUDE.md,
 // openspec/config.yaml; the name-guard spec). The banned names exist only as hashes (banned.sha256); no plain
 // list is kept anywhere. Text and paths are split into words (on non-alphanumerics and camel-case
 // boundaries); every word, run of 2-3 words, and their concatenation is hashed and looked up. A word inside
