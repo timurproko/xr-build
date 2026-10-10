@@ -217,7 +217,7 @@ Layout:
 | `packages/app-icon` | `@xr-build/app-icon`: default app icon, `.ico`, rendering an app's own icon |
 | `packages/control-panel` | `@xr-build/control-panel`: the control panel (Node server + browser UI) |
 | `templates/` | the new workspace and the new app the panel creates |
-| `tools/` | `fetch-deps`, `name-guard`, `preview-readme`, `add-to-start.vbs` |
+| `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `preview-readme`, `add-to-start.vbs` |
 | `openspec/` | the plan: specs and changes |
 
 Tests:

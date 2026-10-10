@@ -1,0 +1,115 @@
+name: CI
+
+# Every PR to main runs the checks its changes need; "CI required" collects them and is the one check the
+# main ruleset requires. Pushes to main run everything (and fill the caches PR runs read).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.select.outputs.node }}
+      native: ${{ steps.select.outputs.native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "node=true" >> "$GITHUB_OUTPUT"; echo "native=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE...$HEAD")
+          echo "$files"
+          # A change to CI itself runs everything.
+          match() { echo "$files" | grep -qE "$1" && echo true || echo false; }
+          echo "node=$(match '^(packages/|tools/|templates/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "native=$(match '^(native/|tools/fetch-deps/|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+
+  names:
+    name: Name guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node tools/name-guard/name-guard.mjs check
+
+  openspec:
+    name: OpenSpec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npx --yes @fission-ai/openspec@1.14.1 validate --all --strict --no-interactive
+
+  node:
+    name: Node tests
+    needs: changes
+    if: needs.changes.outputs.node == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # --no-bail: every suite reports, not only the first that fails.
+      - run: pnpm -r --no-bail --if-present test
+
+  native:
+    name: Host build and tests
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            third_party/*
+            !third_party/README.md
+          key: third-party-${{ hashFiles('tools/fetch-deps/deps.lock.json', 'tools/fetch-deps/sources.mjs') }}
+      - run: node tools/fetch-deps/fetch-deps.mjs
+      # The runner's newest Visual Studio (no -G): the image decides the version.
+      - run: cmake -S native/host -B native/host/build -A x64
+      - run: cmake --build native/host/build --config Release --parallel
+      - run: native/host/build/Release/host-tests.exe
+
+  required:
+    name: CI required
+    if: always()
+    needs: [changes, names, openspec, node, native]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          # skipped = not needed for these changes; anything else but success fails the check.
+          if echo "$RESULTS" | grep -qE '"(failure|cancelled)"'; then exit 1; fi
