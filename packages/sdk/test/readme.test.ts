@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as sdk from '../src/index.ts';
 
-const README = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+// A Windows checkout may have CRLF line ends.
+const README = readFileSync(new URL('../README.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const code = [...README.matchAll(/```(?:ts|js)\n([\s\S]*?)```/g)].map((m) => m[1]).join('\n');
 
 test('README imports from the SDK exist', () => {

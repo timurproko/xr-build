@@ -76,7 +76,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      # --no-bail: every suite reports, not only the first that fails.
+      - run: pnpm -r --no-bail --if-present test
 
   native:
     name: Host build and tests
