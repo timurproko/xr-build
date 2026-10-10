@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+builds/
+*.log
+.vite/
+# fetched / built native binaries (see tools/fetch-deps)
+third_party/*
+!third_party/README.md
+# native build trees
+native/**/build/
+plugins/**/build/
+launcher/**/bin/
+launcher/**/obj/
+# packager output and local projects
+.packager/
+*.zip
+
+# A GPU runtime some plugins use writes its own log into the working folder
+cuda_log.txt
+# test project outputs (hand recordings)
+tests/*/out/
+native/**/build.old/

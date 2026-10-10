@@ -1,0 +1,78 @@
+﻿#include "app_icon.h"
+
+#include <wincodec.h>
+#include <wrl/client.h>
+
+#include <vector>
+
+#include "log.h"
+
+using Microsoft::WRL::ComPtr;
+
+HICON loadIconFile(const std::wstring& path, int size) {
+  if (path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) return nullptr;
+  const HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  HICON icon = nullptr;
+  {
+    ComPtr<IWICImagingFactory> wic;
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICBitmapScaler> scaler;
+    ComPtr<IWICFormatConverter> bgra;
+    if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) &&
+        SUCCEEDED(wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)) &&
+        SUCCEEDED(decoder->GetFrame(0, &frame)) && SUCCEEDED(wic->CreateBitmapScaler(&scaler)) &&
+        SUCCEEDED(scaler->Initialize(frame.Get(), size, size, WICBitmapInterpolationModeHighQualityCubic)) &&
+        SUCCEEDED(wic->CreateFormatConverter(&bgra)) &&
+        SUCCEEDED(bgra->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                   WICBitmapPaletteTypeCustom))) {
+      std::vector<BYTE> px((size_t)size * size * 4);
+      if (SUCCEEDED(bgra->CopyPixels(nullptr, size * 4, (UINT)px.size(), px.data()))) {
+        // 32-bit top-down colour bitmap with alpha; the mask is unused but required.
+        BITMAPV5HEADER bh{};
+        bh.bV5Size = sizeof(bh);
+        bh.bV5Width = size;
+        bh.bV5Height = -size;
+        bh.bV5Planes = 1;
+        bh.bV5BitCount = 32;
+        bh.bV5Compression = BI_BITFIELDS;
+        bh.bV5RedMask = 0x00FF0000;
+        bh.bV5GreenMask = 0x0000FF00;
+        bh.bV5BlueMask = 0x000000FF;
+        bh.bV5AlphaMask = 0xFF000000;
+        void* bits = nullptr;
+        HDC dc = GetDC(nullptr);
+        HBITMAP color = CreateDIBSection(dc, (BITMAPINFO*)&bh, DIB_RGB_COLORS, &bits, nullptr, 0);
+        ReleaseDC(nullptr, dc);
+        HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
+        if (color && mask) {
+          memcpy(bits, px.data(), px.size());
+          ICONINFO ii{TRUE, 0, 0, mask, color};
+          icon = CreateIconIndirect(&ii);
+        }
+        if (color) DeleteObject(color);
+        if (mask) DeleteObject(mask);
+      }
+    }
+  }
+  if (SUCCEEDED(co)) CoUninitialize();
+  return icon;
+}
+
+std::string applyWindowIcon(HWND hwnd, const std::wstring& path) {
+  const int bigSize = GetSystemMetrics(SM_CXICON), smallSize = GetSystemMetrics(SM_CXSMICON);
+  HICON hBig = loadIconFile(path, bigSize), hSmall = loadIconFile(path, smallSize);
+  std::string source = narrow(path);
+  if (!hBig || !hSmall) {
+    if (hBig) DestroyIcon(hBig);
+    if (hSmall) DestroyIcon(hSmall);
+    HINSTANCE inst = GetModuleHandleW(nullptr);
+    hBig = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, bigSize, bigSize, 0);
+    hSmall = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, smallSize, smallSize, 0);
+    source = "built-in";
+  }
+  // The icons live as long as the window (the process); they are not destroyed.
+  SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hBig);
+  SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmall);
+  return source;
+}

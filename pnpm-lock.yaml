@@ -1,0 +1,54 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/app-icon: {}
+
+  packages/control-panel: {}
+
+  packages/packager-ui: {}
+
+  packages/sdk:
+    devDependencies:
+      three:
+        specifier: 0.170.0
+        version: 0.170.0
+
+  packages/ui-kit:
+    dependencies:
+      '@xr-build/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      lucide:
+        specifier: ^1.54.0
+        version: 1.54.0
+    devDependencies:
+      three:
+        specifier: 0.170.0
+        version: 0.170.0
+
+  tools/calibrate: {}
+
+  tools/fetch-deps: {}
+
+  tools/name-guard: {}
+
+packages:
+
+  lucide@1.54.0:
+    resolution: {integrity: sha512-2N2brA+7NYLDlxG2QNcmGej5Qhw3pYMPN9MLktTNkQfs7Sk/2g2e8s0CUWibLz5lPVKMYesxm+k/ndDB7E1JjQ==}
+
+  three@0.170.0:
+    resolution: {integrity: sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ==}
+
+snapshots:
+
+  lucide@1.54.0: {}
+
+  three@0.170.0: {}

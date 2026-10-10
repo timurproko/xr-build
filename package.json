@@ -1,0 +1,18 @@
+{
+  "name": "xr-build",
+  "private": true,
+  "description": "Three.js web apps on 3D displays with hand input, packaged for station platforms; displays, inputs and platforms are plugins",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch-deps": "node tools/fetch-deps/fetch-deps.mjs",
+    "check:names": "node tools/name-guard/name-guard.mjs check",
+    "names": "node tools/name-guard/name-guard.mjs",
+    "hooks": "git config core.hooksPath .githooks",
+    "panel": "node packages/control-panel/src/server.ts --open",
+    "test": "pnpm -r --if-present test",
+    "preview:readme": "node tools/preview-readme/preview-readme.mjs"
+  }
+}

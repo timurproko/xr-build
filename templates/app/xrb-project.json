@@ -1,0 +1,9 @@
+{
+  "name": "__NAME__",
+  "kind": "app",
+  "entry": "dist",
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  }
+}
