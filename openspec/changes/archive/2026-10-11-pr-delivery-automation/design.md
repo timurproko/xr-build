@@ -128,7 +128,8 @@ merged PR are planned work and are not reported.
 ### D9. Settings as code: declared keys only, apply needs a confirm flag
 `config/github-repository-governance.json` declares: repository merge settings (squash only, auto-merge, delete branch
 on merge, squash title and message), Actions default workflow permissions (`read`), the `protect-main` ruleset (rules,
-required check, bypass) and labels (`no-auto-merge`, `openspec-in-progress`, `openspec-reconcile`, `nightly-failure`).
+required check, bypass) and labels (`no-auto-merge`, `openspec-in-progress`, `openspec-reconcile`, `nightly-failure`,
+`governance-drift`).
 `tools/repo-governance/governance.mjs`:
 
 - `check` compares only declared keys with the live API (rulesets normalised: ids, links and timestamps dropped) and
@@ -177,10 +178,11 @@ worktree with a state:
 
 Sweep never removes anything without `--apply`, and never a `dirty`, `active`, `closed` or `unknown` worktree.
 
-### D13. This change finalizes by hand
+### D13. This change finalizes by hand; a rollout change checks it live
 The finalization workflow runs from `main`'s copy, so it does not exist for this PR. This change is archived by hand
-(`openspec archive pr-delivery-automation --yes`) as its last task; the next linked PR is the first one the bot
-finalizes.
+(`openspec archive pr-delivery-automation --yes`) as its last task. The workflows that run only from `main` are
+checked end to end by the follow-up change `pr-delivery-automation-rollout` (added here, `skip_specs`), whose own PR
+is the first one the bot finalizes.
 
 ## Risks / Trade-offs
 

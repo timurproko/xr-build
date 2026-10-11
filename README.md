@@ -217,7 +217,9 @@ Layout:
 | `packages/app-icon` | `@xr-build/app-icon`: default app icon, `.ico`, rendering an app's own icon |
 | `packages/control-panel` | `@xr-build/control-panel`: the control panel (Node server + browser UI) |
 | `templates/` | the new workspace and the new app the panel creates |
-| `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `preview-readme`, `add-to-start.vbs` |
+| `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `repo-governance`, `preview-readme`, `add-to-start.vbs` |
+| `config/` | `github-repository-governance.json`: repository settings as code |
+| `.github/` | CI, the bot workflows, the PR template |
 | `openspec/` | the plan: specs and changes |
 
 Tests:
@@ -243,6 +245,36 @@ Preview the README as GitHub renders it, in your browser (needs `gh`):
 ```text
 pnpm preview:readme
 ```
+
+### Changes and pull requests
+
+`main` takes changes only through a squash-merged PR that passes the `CI required` check. Each task works in its own
+worktree, which links the primary checkout's `third_party/` instead of fetching CEF again:
+
+```text
+pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
+pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
+pnpm worktree sweep --apply            # remove the merged, clean ones
+```
+
+A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
+block; the code follows in the same PR once the plan is approved. When the PR is marked ready, the repo bot archives
+the change in the PR (specs synced), and CI's `Delivery` job turns green. Documentation-only PRs that link no change
+merge by themselves once CI passes (the `no-auto-merge` label opts out). Every night CI runs every job on `main`; a
+failure opens a draft `fix/nightly-<date>` PR. The full process for agents is `.claude/skills/change-delivery/SKILL.md`.
+
+Repository settings, the `main` ruleset and the workflow labels are declared in
+`config/github-repository-governance.json`; a weekly workflow reports drift in an issue. Change them in a PR, then:
+
+```text
+pnpm governance check
+pnpm governance apply --confirm apply-xr-build-governance
+```
+
+**Repo bot.** The bot workflows run as a GitHub App installed on this repository only, with repository permissions
+Contents, Pull requests and Issues (read and write), Administration and Metadata (read), and no webhook. Its id is
+the Actions variable `XRB_BOT_APP_ID` and a private key the secret `XRB_BOT_PRIVATE_KEY`; the `Bot probe` workflow
+checks both. To rotate the key, generate a new one on the App's page, replace the secret, and delete the old key.
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/separator-dark.svg"><img src="docs/assets/readme/separator.svg" alt="" width="280"></picture></p>
 

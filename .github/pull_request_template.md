@@ -1,15 +1,29 @@
-## Summary
+## Proposal
 
-<!-- What changes and why, in 1-3 sentences. The PR title is `type(scope): subject` and becomes the squash commit. -->
+<!-- One or two sentences: what changes and why. The title is `type(scope): subject` and becomes the squash commit. -->
 
-## Changes
+## Implementation
 
-<!-- 2-6 bullets: what moved, what is new, what is gone. Link the OpenSpec change if there is one. -->
+<!-- Two to five bullets: what moved, what is new, what is gone. -->
+
+-
+
+## Acceptance
+
+<!-- Added when the implementation is complete: one to ten plain bullets saying what now holds (no checkboxes,
+     no generic CI or review items). Delete this section for a plan-only draft. -->
 
 -
 
-## Test
+## Automation
 
-<!-- What ran (unit tests, host build, a run on the rig with display / input) and what it showed; what was not tested. -->
+<details>
+<summary>Used by CI to link this PR to its OpenSpec change</summary>
 
--
+<!-- For a PR that implements an OpenSpec change, put {"version":1,"change":"<change-id>"} inside the block.
+     Leave it empty when the PR implements no change. -->
+
+```openspec-implementation
+```
+
+</details>
