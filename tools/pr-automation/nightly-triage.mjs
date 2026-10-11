@@ -12,7 +12,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const NIGHTLY_LABEL = 'nightly-failure';
-const TAIL_LINES = 40;
+// The job that only collects the others' results: its failure says nothing of its own.
+export const REQUIRED_JOB = 'CI required';
+const TAIL_LINES = 20;
+const MAX_FAILURES = 10;
 
 /** What to do: 'open' (new draft PR), 'comment-failure', 'comment-green' or 'none'. */
 export function planTriage({ conclusion, openPr }) {
@@ -21,12 +24,18 @@ export function planTriage({ conclusion, openPr }) {
   return openPr ? 'comment-failure' : 'open';
 }
 
-/** The last lines of a job log up to its last error, without timestamps or colour codes. */
+/**
+ * The last lines of a job log up to its last error, without timestamps or terminal escapes. Failing-test lines
+ * (`✖`, `not ok`) from earlier in the log come first, so a failure that other packages' output scrolled away is named.
+ */
 export function logTail(log, lines = TAIL_LINES) {
   const clean = log.split(/\r?\n/).map((l) => l.replace(/^﻿?\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, '').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
   let end = clean.length;
   for (let i = clean.length - 1; i >= 0; i--) if (clean[i].includes('##[error]')) { end = i + 1; break; }
-  return clean.slice(0, end).filter((l) => l.trim()).slice(-lines).join('\n');
+  const body = clean.slice(0, end).filter((l) => l.trim());
+  const tail = body.slice(-lines);
+  const failures = [...new Set(body.filter((l) => /✖|\bnot ok\b/.test(l) && !tail.includes(l)))].slice(0, MAX_FAILURES);
+  return [...failures, ...(failures.length ? ['...'] : []), ...tail].join('\n');
 }
 
 /** Markdown summary of a failed run: [{ name, steps: [names], tail }]. */
@@ -86,7 +95,7 @@ async function main(a) {
     return;
   }
 
-  const jobs = api(`repos/${repoName}/actions/runs/${run.id}/jobs?per_page=100`).jobs.filter((j) => j.conclusion === 'failure');
+  const jobs = api(`repos/${repoName}/actions/runs/${run.id}/jobs?per_page=100`).jobs.filter((j) => j.conclusion === 'failure' && j.name !== REQUIRED_JOB);
   const summary = failureSummary({
     runUrl: run.html_url,
     sha: run.head_sha,
