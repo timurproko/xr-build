@@ -2,9 +2,10 @@
 
 ## 1. Settings and bot
 
-- [ ] 1.1 Maintainer runs `pnpm governance apply --confirm apply-xr-build-governance`; verify it creates `openspec-in-progress`, `openspec-reconcile`, `nightly-failure` and `governance-drift` and its closing `check` reports a match
-- [ ] 1.2 Dispatch `Bot probe`; verify the run names the App's bot login and reads the repository, the workflow permissions and the `protect-main` ruleset with the App token
-- [ ] 1.3 Dispatch `Bot probe` with `simulate_missing`; verify the run stops at the guard with a message naming `XRB_BOT_APP_ID`
+- [x] 1.1 Remove `governance-drift.yml` and the `governance-drift` label, make the bot probe read only the repository, pull requests and issues, and drop Administration from the documented App permissions; verify no workflow calls a settings or rulesets endpoint (`grep` for `actions/permissions` and `rulesets` in `.github/`)
+- [ ] 1.2 Maintainer runs `pnpm governance apply --confirm apply-xr-build-governance`; verify it creates `openspec-in-progress`, `openspec-reconcile` and `nightly-failure` and its closing `check` reports a match
+- [ ] 1.3 Dispatch `Bot probe` from this branch with the App's Administration permission set to No access; verify the run names the App's bot login and reads the repository, pull requests and issues with the App token
+- [ ] 1.4 Dispatch `Bot probe` with `simulate_missing`; verify the run stops at the guard with a message naming `XRB_BOT_APP_ID`
 
 ## 2. PR flow
 
@@ -16,6 +17,6 @@
 ## 3. Scheduled workflows
 
 - [ ] 3.1 Dispatch `OpenSpec reconcile`; verify it lists the active changes, reports no merged-but-unarchived change and opens no issue
-- [ ] 3.2 Turn on rebase merging in the repository settings, dispatch `Governance drift`; verify an issue labelled `governance-drift` names `repository.allow_rebase_merge`; restore with `pnpm governance apply --confirm apply-xr-build-governance`, dispatch again, and verify the issue is closed
+- [ ] 3.2 Turn on rebase merging in the repository settings and run `pnpm governance check`; verify it exits 1 naming `repository.allow_rebase_merge`; restore with `pnpm governance apply --confirm apply-xr-build-governance` and verify `check` reports a match
 - [ ] 3.3 Dispatch `CI` on `main`; verify every job runs regardless of paths, including the host build
 - [ ] 3.4 Push a throwaway branch with a failing test, dispatch `CI` on it, then dispatch `Nightly triage` with that run's id; verify a draft PR `fix/nightly-<date>` labelled `nightly-failure` opens with the failure summary and a linked, valid change scaffold; close it unmerged and delete its branch and the throwaway branch

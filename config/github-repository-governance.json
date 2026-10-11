@@ -50,7 +50,6 @@
     { "name": "no-auto-merge", "color": "bfd4f2", "description": "Keep a docs-only PR from merging by itself" },
     { "name": "openspec-in-progress", "color": "c5def5", "description": "Edits an OpenSpec change delivered over several PRs" },
     { "name": "openspec-reconcile", "color": "fbca04", "description": "OpenSpec changes merged without being archived" },
-    { "name": "nightly-failure", "color": "d93f0b", "description": "Fix for a failed nightly CI run" },
-    { "name": "governance-drift", "color": "e99695", "description": "Live repository settings differ from config/github-repository-governance.json" }
+    { "name": "nightly-failure", "color": "d93f0b", "description": "Fix for a failed nightly CI run" }
   ]
 }
