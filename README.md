@@ -255,6 +255,7 @@ worktree, which links the primary checkout's `third_party/` instead of fetching 
 pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
 pnpm worktree sweep --apply            # remove the merged, clean ones
+pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
 ```
 
 A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
