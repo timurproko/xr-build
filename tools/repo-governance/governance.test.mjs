@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { CONFIG_PATH, CONFIRM, check, diffDeclared, run } from './governance.mjs';
 
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-const REPO = 'owner/repo';
+const REPO = 'owner/xr-build';
 
 /** A fake GitHub holding `state`; records writes. Rulesets come back with ids, links and extra defaults. */
 function fakeGitHub(state) {
@@ -72,6 +72,21 @@ test('arrays of plain values compare as sets; order does not matter', () => {
   assert.equal(diffDeclared({ a: ['x'] }, { a: ['x', 'y'] }).length, 1);
 });
 
+test('an empty declared list (no bypass actors) is compared as a whole, not as typed rules', () => {
+  const actor = { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' };
+  assert.deepEqual(diffDeclared({ bypass_actors: [] }, { bypass_actors: [actor] }), [{ path: 'bypass_actors', declared: [], live: [actor] }]);
+  assert.deepEqual(diffDeclared({ bypass_actors: [] }, { bypass_actors: [] }), []);
+});
+
+test('another repository is refused before anything is read or written', () => {
+  const calls = [];
+  const lines = [];
+  const api = (method, p) => { calls.push(`${method} ${p}`); return null; };
+  assert.equal(run(['apply', '--confirm', CONFIRM], { api, repo: 'owner/other-repo', config, out: (l) => lines.push(l) }), 2);
+  assert.deepEqual(calls, []);
+  assert.match(lines.join('\n'), /refusing: the repository is owner\/other-repo, not xr-build/);
+});
+
 test('apply without the confirm flag prints the plan and writes nothing', () => {
   const live = matching();
   live.repository.allow_merge_commit = true;
@@ -79,7 +94,7 @@ test('apply without the confirm flag prints the plan and writes nothing', () => 
   const lines = [];
   assert.equal(run(['apply'], { api: gh.api, repo: REPO, config, out: (l) => lines.push(l) }), 0);
   assert.deepEqual(gh.writes, []);
-  assert.match(lines.join('\n'), /PATCH repos\/owner\/repo {2}\(repository settings\)[\s\S]*dry run: nothing written/);
+  assert.match(lines.join('\n'), /PATCH repos\/owner\/xr-build {2}\(repository settings\)[\s\S]*dry run: nothing written/);
 });
 
 test('apply with the flag writes the declared state, creates missing items, deletes nothing, then checks clean', () => {
@@ -92,10 +107,10 @@ test('apply with the flag writes the declared state, creates missing items, dele
   const lines = [];
   assert.equal(run(['apply', '--confirm', CONFIRM], { api: gh.api, repo: REPO, config, out: (l) => lines.push(l) }), 0);
   assert.deepEqual(gh.writes.map((w) => `${w.method} ${w.p}`), [
-    'PATCH repos/owner/repo',
-    'POST repos/owner/repo/rulesets',
-    'PATCH repos/owner/repo/labels/no-auto-merge',
-    'POST repos/owner/repo/labels',
+    'PATCH repos/owner/xr-build',
+    'POST repos/owner/xr-build/rulesets',
+    'PATCH repos/owner/xr-build/labels/no-auto-merge',
+    'POST repos/owner/xr-build/labels',
   ]);
   assert.ok(!gh.writes.some((w) => w.method === 'DELETE'));
   assert.ok(live.rulesets.some((r) => r.name === 'someone-elses') && live.labels.some((l) => l.name === 'bug'), 'undeclared items stay');
