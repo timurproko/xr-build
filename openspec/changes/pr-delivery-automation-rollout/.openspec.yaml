@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-11
+# Live checks of pr-delivery-automation; no spec-level behaviour of its own.
+skip_specs: true

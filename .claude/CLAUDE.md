@@ -15,24 +15,15 @@ user's **workspace** (`XRB_HOME`, else `%USERPROFILE%\.xr-build`), a separate pr
 
 ## Changes and pull requests
 
-- `main` takes changes only through a PR (ruleset: squash only, required check "CI required", branch deleted on
-  merge). The primary checkout stays on `main`; a task works on its own branch `<type>/<short-desc>` (types:
-  `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`, `perf`) in its own worktree:
-  `pnpm worktree add <type>/<short-desc>` makes `.worktrees/<short-desc>` from `origin/main`, links the primary's
-  `third_party/` (no second CEF) and installs; `pnpm worktree remove <short-desc>` after the merge. Never edit in
-  another task's worktree. Worktrees build and test in parallel, but only one host runs at a time.
+- Every change follows the `change-delivery` skill (`.claude/skills/change-delivery/SKILL.md`): own worktree and
+  branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
+  the repo bot, handoff, cleanup. Agents never merge, arm auto-merge or push to `main`; the maintainer merges.
 - Commits and PR titles: `type(scope): subject` (scope: `host`, `plugin-sdk`, `sdk`, `ui-kit`, `app-icon`,
   `panel`, `templates`, `fetch-deps`, `name-guard`, `openspec`, `ci`, `claude`, ...). The PR title becomes the
-  squash commit on `main`. PR body: `.github/pull_request_template.md` (Summary, Changes, Test).
-- An OpenSpec change ships in the PR that implements it: its folder is in the PR, and before the PR is ready the
-  change is archived in it (`openspec archive <change> --yes`, specs synced), so `main` gets code and specs together.
-- CI (`.github/workflows/ci.yml`): name guard and OpenSpec always; Node tests when `packages/`, `tools/`,
-  `templates/` or the pnpm files change; host build and `host-tests` when `native/` or `tools/fetch-deps/` change.
-  Fix failures in the same PR; never weaken a test to pass.
-- Agents push the branch and open the PR (draft while in progress); they never merge, never arm auto-merge and never
-  push to `main`. The maintainer merges. A ready PR that changes only docs (`docs/`, `openspec/`, Markdown outside
-  `.claude/` and `.github/`) merges by itself once CI passes (`.github/workflows/docs-auto-merge.yml`); the
-  `no-auto-merge` label opts out.
+  squash commit on `main`.
+- `main` takes changes only through a PR: the `protect-main` ruleset (squash only, required check "CI required") and
+  the other repository settings are declared in `config/github-repository-governance.json`; change them there and
+  apply with `pnpm governance apply --confirm apply-xr-build-governance`.
 
 ## Names stay out of the core
 
@@ -67,9 +58,12 @@ user's **workspace** (`XRB_HOME`, else `%USERPROFILE%\.xr-build`), a separate pr
 - `tools/fetch-deps` - native binaries with pinned SHA-256s: the core's into `third_party/`, the workspace
   plugins' (`--workspace`) into `<workspace>/third_party/`.
 - `tools/name-guard` - the name guard (hashes in `banned.sha256`).
-- `tools/worktree` - `pnpm worktree add|remove`: task worktrees in `.worktrees/` sharing `third_party/`.
-- `tools/pr-automation` - the docs-only auto-merge rule (`.github/workflows/docs-auto-merge.yml` runs it).
-- `.github/` - CI (`ci.yml`), docs auto-merge, the PR template.
+- `tools/worktree` - `pnpm worktree add|remove|sweep|handoff`: task worktrees in `.worktrees/` sharing `third_party/`.
+- `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, docs auto-merge,
+  unarchived-change report and nightly triage that the workflows run.
+- `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
+- `.github/` - CI (`ci.yml`: readiness, delivery, nightly), the bot workflows (OpenSpec finalization and reconcile,
+  docs auto-merge, governance drift, nightly triage, bot probe; App token from `actions/app-token`), PR template.
 - `tools/add-to-start.vbs` - adds "XR Build" (start.vbs, default app icon) to the Start menu.
 
 ## Workspace
@@ -97,8 +91,8 @@ start.vbs                                         # control panel: build, packag
 
 Tests: `node --test "test/**/*.test.ts"` in `packages/sdk`, `packages/ui-kit`, `packages/app-icon`,
 `packages/control-panel` (Node runs the .ts directly; no TypeScript parameter properties, type stripping refuses
-them); `node --test` in `tools/fetch-deps`, `tools/name-guard`, `tools/worktree` and `tools/pr-automation`
-(`pnpm test` runs them all); `pnpm check:names`.
+them); `node --test` in `tools/fetch-deps`, `tools/name-guard`, `tools/worktree`, `tools/pr-automation` and
+`tools/repo-governance` (`pnpm test` runs them all); `pnpm check:names`.
 
 Use the CMake bundled with VS Build Tools
 (`Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe`) if none is on PATH.

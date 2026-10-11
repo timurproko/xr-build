@@ -1,6 +1,7 @@
 node_modules/
-# task worktrees (pnpm worktree)
+# task worktrees (pnpm worktree) and agent scratch in them
 .worktrees/
+.artifacts/
 dist/
 build/
 builds/
