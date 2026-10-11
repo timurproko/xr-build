@@ -265,7 +265,8 @@ merge by themselves once CI passes (the `no-auto-merge` label opts out). Every n
 failure opens a draft `fix/nightly-<date>` PR. The full process for agents is `.claude/skills/change-delivery/SKILL.md`.
 
 Repository settings, the `main` ruleset and the workflow labels are declared in
-`config/github-repository-governance.json`; a weekly workflow reports drift in an issue. Change them in a PR, then:
+`config/github-repository-governance.json`. The maintainer checks them locally with their own `gh` login (no
+workflow reads the settings); change them in a PR, then:
 
 ```text
 pnpm governance check
@@ -273,7 +274,7 @@ pnpm governance apply --confirm apply-xr-build-governance
 ```
 
 **Repo bot.** The bot workflows run as a GitHub App installed on this repository only, with repository permissions
-Contents, Pull requests and Issues (read and write), Administration and Metadata (read), and no webhook. Its id is
+Contents, Pull requests and Issues (read and write), Metadata (read), and no webhook. Its id is
 the Actions variable `XRB_BOT_APP_ID` and a private key the secret `XRB_BOT_PRIVATE_KEY`; the `Bot probe` workflow
 checks both. To rotate the key, generate a new one on the App's page, replace the secret, and delete the old key.
 

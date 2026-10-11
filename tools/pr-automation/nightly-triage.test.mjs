@@ -19,7 +19,17 @@ test('first failure opens a PR, a repeat comments, green comments only with a PR
 test('the log tail ends at the last error, without timestamps or colours', () => {
   const log = ['2026-10-11T23:47:01.1234567Z step one', '2026-10-11T23:47:02.0Z \x1b[31mnot ok 3 - hands\x1b[0m', '2026-10-11T23:47:03.0Z ##[error]Process completed with exit code 1.', '2026-10-11T23:47:04.0Z Post job cleanup.'].join('\n');
   assert.equal(logTail(log), 'step one\nnot ok 3 - hands\n##[error]Process completed with exit code 1.');
-  assert.equal(logTail(log, 1), '##[error]Process completed with exit code 1.');
+  assert.equal(logTail(log, 1), 'not ok 3 - hands\n...\n##[error]Process completed with exit code 1.');
+});
+
+test('failing tests scrolled out of the tail by later output are listed first, once each', () => {
+  const log = ['pkg-a test: ✖ throwaway fails (1ms)', 'pkg-a test: ✖ throwaway fails (1ms)', 'pkg-b test: ✔ fine', 'pkg-b test: ✔ fine too', '##[error]Process completed with exit code 1.'].join('\n');
+  assert.equal(logTail(log, 2), 'pkg-a test: ✖ throwaway fails (1ms)\n...\npkg-b test: ✔ fine too\n##[error]Process completed with exit code 1.');
+});
+
+test('the log tail drops a leading byte order mark and every terminal escape, not only colours', () => {
+  const log = ['﻿2026-10-11T23:47:01.0Z \x1b[36;1mnode test\x1b[0m\x1b[K', '2026-10-11T23:47:02.0Z ##[error]boom'].join('\n');
+  assert.equal(logTail(log), 'node test\n##[error]boom');
 });
 
 test('the summary names the run, the failed jobs and steps, with their log tails', () => {

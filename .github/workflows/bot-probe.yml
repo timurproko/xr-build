@@ -1,6 +1,7 @@
 name: Bot probe
 
-# Checks the repo's GitHub App: mints a token and reads the repository and its settings with it. With
+# Checks the repo's GitHub App: mints a token and reads what the bot workflows use with it (repository, pull
+# requests, issues). It needs no access to the repository's settings: those are checked locally. With
 # `simulate_missing`, runs the guard without the App id to show the message a workflow stops with.
 on:
   workflow_dispatch:
@@ -34,5 +35,5 @@ jobs:
         run: |
           echo "bot: $LOGIN ($AUTHOR)"
           gh api "repos/$GITHUB_REPOSITORY" --jq '"repository: \(.full_name), auto-merge \(.allow_auto_merge)"'
-          gh api "repos/$GITHUB_REPOSITORY/actions/permissions/workflow" --jq '"workflow permissions: \(.default_workflow_permissions)"'
-          gh api "repos/$GITHUB_REPOSITORY/rulesets" --jq '"rulesets: \([.[].name] | join(", "))"'
+          gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=1" --jq '"pull requests: readable (\(length) listed)"'
+          gh api "repos/$GITHUB_REPOSITORY/issues?state=all&per_page=1" --jq '"issues: readable (\(length) listed)"'

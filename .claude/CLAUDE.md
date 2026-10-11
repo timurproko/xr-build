@@ -63,7 +63,7 @@ user's **workspace** (`XRB_HOME`, else `%USERPROFILE%\.xr-build`), a separate pr
   unarchived-change report and nightly triage that the workflows run.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
 - `.github/` - CI (`ci.yml`: readiness, delivery, nightly), the bot workflows (OpenSpec finalization and reconcile,
-  docs auto-merge, governance drift, nightly triage, bot probe; App token from `actions/app-token`), PR template.
+  docs auto-merge, nightly triage, bot probe; App token from `actions/app-token`), PR template.
 - `tools/add-to-start.vbs` - adds "XR Build" (start.vbs, default app icon) to the Start menu.
 
 ## Workspace
