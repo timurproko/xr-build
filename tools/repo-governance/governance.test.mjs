@@ -72,6 +72,12 @@ test('arrays of plain values compare as sets; order does not matter', () => {
   assert.equal(diffDeclared({ a: ['x'] }, { a: ['x', 'y'] }).length, 1);
 });
 
+test('an empty declared list (no bypass actors) is compared as a whole, not as typed rules', () => {
+  const actor = { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'pull_request' };
+  assert.deepEqual(diffDeclared({ bypass_actors: [] }, { bypass_actors: [actor] }), [{ path: 'bypass_actors', declared: [], live: [actor] }]);
+  assert.deepEqual(diffDeclared({ bypass_actors: [] }, { bypass_actors: [] }), []);
+});
+
 test('apply without the confirm flag prints the plan and writes nothing', () => {
   const live = matching();
   live.repository.allow_merge_commit = true;

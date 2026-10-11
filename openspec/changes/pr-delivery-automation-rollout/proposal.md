@@ -13,6 +13,8 @@ another repository, so the settings check stays a local maintainer command and t
 - Remove the governance drift workflow and its `governance-drift` label; `pnpm governance check` is run locally by the
   maintainer with their own credentials.
 - The bot probe reads only what the bot workflows use (repository, pull requests, issues).
+- `protect-main` gets no bypass actors: the first rollout PR was merged by an admin click while `Delivery` still
+  failed, so its change reached `main` unfinalized; this PR continues it.
 - Apply the governance file once (creates the workflow labels) and confirm `check` is clean.
 - Run the bot probe, with and without the App id.
 - Watch one docs-only PR merge by itself and start CI on `main`.
@@ -25,7 +27,8 @@ another repository, so the settings check stays a local maintainer command and t
 
 ### Modified Capabilities
 
-- `repository-governance`: the drift check is local only; no workflow reads the repository's settings.
+- `repository-governance`: the drift check is local only; no workflow reads the repository's settings; the
+  `protect-main` ruleset has no bypass actors.
 
 ## Impact
 

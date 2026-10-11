@@ -1,5 +1,19 @@
 ## MODIFIED Requirements
 
+### Requirement: Declared repository state
+`config/github-repository-governance.json` SHALL declare the repository's merge settings, the Actions default workflow
+permissions, the `protect-main` ruleset and the labels the workflows use. The `protect-main` ruleset SHALL have no
+bypass actors, so nobody, an admin included, merges to `main` before `CI required` passes. Changes to the file SHALL
+go through a PR like any other file.
+
+#### Scenario: Reviewing a settings change
+- **WHEN** the maintainer wants merge commits allowed again
+- **THEN** the change is a PR editing the file, and the live setting changes only after an apply
+
+#### Scenario: Merging before the checks
+- **WHEN** the maintainer marks a PR ready and tries to merge it while `Delivery` is still failing
+- **THEN** GitHub offers no bypass and the PR merges only after `CI required` passes
+
 ### Requirement: Drift check
 `tools/repo-governance/governance.mjs check` SHALL compare only the declared keys with the live repository and exit
 with an error and a readable difference when they disagree. The maintainer SHALL run it locally with their own

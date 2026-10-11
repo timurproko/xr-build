@@ -31,7 +31,7 @@ export function diffDeclared(declared, live, at = '') {
     if (!isObject(live)) return [{ path: at || '.', declared, live }];
     return Object.keys(declared).filter((k) => k !== '$comment').flatMap((k) => diffDeclared(declared[k], live[k], at ? `${at}.${k}` : k));
   }
-  if (Array.isArray(declared) && declared.every((d) => isObject(d) && typeof d.type === 'string')) {
+  if (Array.isArray(declared) && declared.length && declared.every((d) => isObject(d) && typeof d.type === 'string')) {
     if (!Array.isArray(live)) return [{ path: at, declared, live }];
     const out = declared.flatMap((d) => {
       const l = live.find((x) => x?.type === d.type);
