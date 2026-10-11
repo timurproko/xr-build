@@ -22,6 +22,11 @@ test('the log tail ends at the last error, without timestamps or colours', () =>
   assert.equal(logTail(log, 1), '##[error]Process completed with exit code 1.');
 });
 
+test('the log tail drops a leading byte order mark and every terminal escape, not only colours', () => {
+  const log = ['﻿2026-10-11T23:47:01.0Z \x1b[36;1mnode test\x1b[0m\x1b[K', '2026-10-11T23:47:02.0Z ##[error]boom'].join('\n');
+  assert.equal(logTail(log), 'node test\n##[error]boom');
+});
+
 test('the summary names the run, the failed jobs and steps, with their log tails', () => {
   const s = failureSummary({ runUrl: 'https://example.invalid/run/1', sha: 'abcdef1234', jobs: [{ name: 'Node tests', steps: ['Run pnpm test'], tail: 'not ok 3' }] });
   assert.match(s, /failed at abcdef1: https:\/\/example.invalid\/run\/1/);

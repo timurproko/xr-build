@@ -23,7 +23,7 @@ export function planTriage({ conclusion, openPr }) {
 
 /** The last lines of a job log up to its last error, without timestamps or colour codes. */
 export function logTail(log, lines = TAIL_LINES) {
-  const clean = log.split(/\r?\n/).map((l) => l.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, '').replace(/\x1b\[[0-9;]*m/g, ''));
+  const clean = log.split(/\r?\n/).map((l) => l.replace(/^﻿?\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, '').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
   let end = clean.length;
   for (let i = clean.length - 1; i >= 0; i--) if (clean[i].includes('##[error]')) { end = i + 1; break; }
   return clean.slice(0, end).filter((l) => l.trim()).slice(-lines).join('\n');
@@ -59,7 +59,16 @@ export function prBody({ change, summary }) {
   ].join('\n');
 }
 
-function main(a) {
+// A job's log, read with fetch: `gh api` refuses to print a response with terminal escape sequences, and CI logs have them.
+async function jobLog(repoName, id) {
+  const res = await fetch(`https://api.github.com/repos/${repoName}/actions/jobs/${id}/logs`, {
+    headers: { authorization: `Bearer ${process.env.GH_TOKEN}`, accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`job ${id} log: HTTP ${res.status}`);
+  return res.text();
+}
+
+async function main(a) {
   const repoName = process.env.GITHUB_REPOSITORY;
   for (const k of ['repo', 'run', 'author']) if (!a[k]) throw new Error(`missing --${k}`);
   const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, maxBuffer: 64 << 20, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
@@ -81,11 +90,11 @@ function main(a) {
   const summary = failureSummary({
     runUrl: run.html_url,
     sha: run.head_sha,
-    jobs: jobs.map((j) => ({
+    jobs: await Promise.all(jobs.map(async (j) => ({
       name: j.name,
       steps: j.steps.filter((s) => s.conclusion === 'failure').map((s) => s.name),
-      tail: logTail(gh(['api', `repos/${repoName}/actions/jobs/${j.id}/logs`])),
-    })),
+      tail: logTail(await jobLog(repoName, j.id)),
+    }))),
   });
   if (plan === 'comment-failure') {
     api(`repos/${repoName}/issues/${openPr.number}/comments`, 'POST', { body: `Failed again.\n\n${summary}` });
@@ -115,7 +124,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const a = {};
   for (let i = 0; i < argv.length; i += 2) a[argv[i].replace(/^--/, '')] = argv[i + 1];
   try {
-    main(a);
+    await main(a);
   } catch (e) {
     console.error(String(e.stderr || e.message || e));
     process.exit(1);
