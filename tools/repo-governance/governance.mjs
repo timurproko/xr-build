@@ -102,14 +102,22 @@ function ghApi(method, p, body) {
   return out.trim() ? JSON.parse(out) : null;
 }
 
+// The checkout this script lives in decides the repository, never the caller's working folder: run from another
+// repository's folder, `gh repo view` once named that one and apply rewrote its settings.
+export const REPO_NAME = 'xr-build';
+
 function repoName() {
   if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY;
-  return execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { encoding: 'utf8' }).trim();
+  return execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { encoding: 'utf8', cwd: path.resolve(HERE, '../..') }).trim();
 }
 
 /** Runs a command; returns the exit code. `api` and `out` are injectable for tests. */
 export function run(argv, { api = ghApi, repo = repoName(), config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')), out = console.log } = {}) {
   const [cmd, flag, value] = argv;
+  if (repo.split('/').pop() !== REPO_NAME) {
+    out(`refusing: the repository is ${repo}, not ${REPO_NAME}; this file declares ${REPO_NAME}'s settings only`);
+    return 2;
+  }
   if (cmd === 'check') {
     const diffs = check(config, readLive(api, repo));
     out(diffs.length ? `${repo} drifted from config/github-repository-governance.json:\n${formatDiff(diffs)}` : `${repo} matches config/github-repository-governance.json`);
