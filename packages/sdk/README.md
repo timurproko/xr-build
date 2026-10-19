@@ -67,11 +67,9 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
-function animate() {
+xrb.setAnimationLoop(() => {
   xrb.render(scene, camera);                                  // instead of renderer.render
-  requestAnimationFrame(animate);
-}
-requestAnimationFrame(animate);
+});                                                           // also drives a headset session
 ```
 
 The core's `templates/app` is a complete app like this one ("New project" in the panel copies it into the
@@ -208,6 +206,41 @@ xrb.onPlatform((p) => applySettings(p.params));   // the station can configure a
 | `pointer` | `true` | hands as pointer events |
 | `hands` | | smoothing, prediction, grace, pinch and grab thresholds |
 | `displayLatencyMs` | `8` | render-to-panel delay used for prediction |
+| `xr` | | WebXR headset: `mode`, `button`, `passthroughBackground`, `panel` (see below) |
+
+## WebXR headsets
+
+The same build runs on a standalone headset with hand tracking, in its browser engine, without the host. When
+the page runs without a host and the browser offers an immersive WebXR session, the SDK shows an Enter
+button (`xr: { button: false }` hides it; call `xrb.enterXR()` from your own gesture instead).
+
+- **Frames.** A page's own `requestAnimationFrame` stops in a session: drive frames with
+  `xrb.setAnimationLoop(fn)`, which uses the browser's frames, or the headset's while a session runs. The SDK
+  warns in the console when a session shows nothing.
+- **Virtual panel.** When the session starts, a virtual panel is placed 0.45 m in front of the user and
+  0.15 m below their eyes, upright and facing them (default size: the nominal display's, about
+  0.60 x 0.34 m). Your `mapping` puts it into the scene exactly as it does a physical panel, so scene units
+  per metre and the controls' physical sizes are unchanged. `xr.panel` sets `widthM`, `heightM`,
+  `distanceM` and `dropM`; `xrb.recenter()` (and the headset's own recentre) places it in front of the user again.
+- **Hands.** The headset's 25 hand joints become the SDK's 21 keypoints (finger metacarpals are dropped) in the
+  panel frame: `xrb.on`, `sceneHands`, the interaction core, the UI kit and pointer emulation work as on a
+  3D display. Pinch and grab come from the keypoints; prediction is off (the headset predicts already).
+- **Passthrough.** `immersive-ar` is used when offered, else `immersive-vr` (`xr.mode` picks one). In
+  passthrough the scene background is hidden while drawing so the room shows through
+  (`passthroughBackground: false` keeps it).
+- **Installed apps.** An app installed as an immersive headset app has no page to tap: with `?xrb-xr=enter` in
+  its address (a headset packager puts it in the app's start address) or `xr: { autoEnter: true }`, the SDK
+  enters the session as soon as it is available. It also enters when the browser grants a session after a
+  navigation from one (`sessiongranted`).
+
+```ts
+const xrb = createXrb(renderer, { xr: { panel: { distanceM: 0.5 } } });
+xrb.onView((v) => console.log(v.stereo ? 'in the headset' : 'on the page'));
+// xrb.presenting: a session runs; xrb.exitXR() ends it
+```
+
+In the control panel set the project's Target to "WebXR headset": Build package then uses a packager for
+headsets (a workspace plugin), and "Open in browser" previews the build.
 
 ## Performance
 

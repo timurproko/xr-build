@@ -5,7 +5,10 @@
 //   function animate() { xrb.render(scene, camera); requestAnimationFrame(animate); }
 //
 // Inside xrb-host the page is shown in 3D and hands arrive from the cameras; in a
-// normal browser the same code renders one view from the nominal viewer position.
+// normal browser the same code renders one view from the nominal viewer position. In a
+// headset's browser engine with WebXR, Enter (or xrb.enterXR()) starts an immersive session:
+// both eyes come from the headset and hands from its hand tracking (drive frames with
+// xrb.setAnimationLoop, which works in all three).
 import * as THREE from 'three';
 import { HostChannel } from './channel.ts';
 import { HandVisual } from './hand-visual.ts';
@@ -19,6 +22,7 @@ import { PointerEmulation } from './pointer.ts';
 import { ALL_CAPABILITIES, type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, StereoRenderer, type EyePair, type PanelMapping } from './stereo.ts';
+import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
 export { HostChannel } from './channel.ts';
@@ -35,6 +39,7 @@ export { iconRender, iconReady, iconServing, serveIconCapture, type IconRequest,
 export { OneEuro, DEFAULT_ONE_EURO } from './one-euro.ts';
 export { PointerEmulation, projectToPanel, choosePointerHand } from './pointer.ts';
 export { offAxisProjection, PanelFrame, StereoRenderer, NOMINAL_EYE, type PanelMapping } from './stereo.ts';
+export { detectXrMode, VirtualPanel, wantsAutoEnter, XrHands, XR_JOINTS, XR_PANEL_DEFAULTS, type XrMode, type XrOptions, type XrPanelOptions } from './webxr.ts';
 
 export interface XrbOptions {
   /** how panel metres map into the scene; default: panel in front of your camera */
@@ -54,6 +59,8 @@ export interface XrbOptions {
    * Set `autoReady: false` and call iconReady() yourself when the icon frame needs loading first.
    */
   icon?: { autoReady?: boolean; readyMs?: number };
+  /** WebXR headset session (no host): session kind, Enter button, virtual panel size and placement */
+  xr?: XrOptions;
 }
 
 /** Recommended WebGLRenderer options: no MSAA in side-by-side mode (the biggest GPU cost on a 3D display). */
@@ -65,9 +72,11 @@ export function rendererOptions(): THREE.WebGLRendererParameters {
 /** The page's view: 3D (two eyes side by side, woven by the display) or 2D (one view, a plain picture). */
 export interface XrbView {
   stereo: boolean;
-  /** the host can switch at run time (its display has a switchable session); false in a browser and on a mono display */
+  /** the host can switch at run time (its display has a switchable session); false in a browser, on a mono display and in a headset */
   switchable: boolean;
 }
+
+const navigatorXr = (): XrSystemLike | null => (globalThis as { navigator?: { xr?: XrSystemLike } }).navigator?.xr ?? null;
 
 export class Xrb {
   readonly host: HostInfo | null;
@@ -111,12 +120,26 @@ export class Xrb {
   private readonly iconOptions: { autoReady: boolean; readyMs: number };
   private iconStartedAt = 0;
   private iconSignalled = false;
+  /** the immersive session this browser offers (known shortly after start), null without one or under a host */
+  xrMode: XrMode | null = null;
+  private readonly xrOptions: XrOptions;
+  private readonly xrPanel: VirtualPanel;
+  private readonly xrHands = new XrHands();
+  /** parent of the XR camera: reference space -> scene, so the virtual panel lands where the mapping puts the panel */
+  private readonly xrRig = new THREE.Object3D();
+  private readonly xrCamera = new THREE.PerspectiveCamera();
+  private xrButton: HTMLButtonElement | null = null;
+  private xrFrames = 0;
 
   constructor(renderer: THREE.WebGLRenderer, options: XrbOptions = {}) {
     this.renderer = renderer;
     this.host = getHostInfo();
     this._stereo = !!this.host?.stereo;
-    this.display = this.host?.display ?? DEFAULT_DISPLAY;
+    this.xrOptions = options.xr ?? {};
+    this.xrPanel = new VirtualPanel(this.xrOptions.panel);
+    this.xrRig.matrixAutoUpdate = false;
+    this.xrRig.add(this.xrCamera);
+    this.display = this.host?.display ?? (this.xrOptions.panel ? virtualDisplay(DEFAULT_DISPLAY, this.xrOptions.panel) : DEFAULT_DISPLAY);
     this.displayLatencyMs = options.displayLatencyMs ?? 8;
     this.channel = this.host ? new HostChannel(this.host) : null;
     this.hands = new HandInput(options.hands);
@@ -138,11 +161,95 @@ export class Xrb {
     this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement });
     if (this.icon) this.startIcon(this.icon.size);
     this.setSize();
+    if (!this.host && !this.icon) void this.detectXr();
   }
 
-  /** true: the page shows two eyes side by side in 3D; false: one view in 2D. Can change at run time (onView). */
+  /** true: the page shows two eyes side by side in 3D (or a headset session runs); false: one view in 2D. Can change at run time (onView). */
   get stereo(): boolean {
-    return this._stereo;
+    return this._stereo || this.presenting;
+  }
+
+  /** true while a WebXR headset session runs. */
+  get presenting(): boolean {
+    return !!this.renderer.xr?.isPresenting;
+  }
+
+  /**
+   * Drives the app's frames: the browser's animation frames, or the headset's while a session runs
+   * (a page's own requestAnimationFrame stops in a session). Pass null to stop.
+   */
+  setAnimationLoop(fn: ((timeMs: number) => void) | null): void {
+    this.renderer.setAnimationLoop(fn);
+  }
+
+  /** Starts the headset session; call it from a user gesture (the Enter button does). */
+  async enterXR(): Promise<void> {
+    const xr = navigatorXr();
+    if (!xr || !this.xrMode || this.presenting) return;
+    const session = await xr.requestSession(this.xrMode, { optionalFeatures: ['hand-tracking'] });
+    this.renderer.xr.enabled = true;
+    this.renderer.xr.setReferenceSpaceType('local');
+    this.xrPanel.reset();
+    await this.renderer.xr.setSession(session as unknown as XRSession);
+    // After the renderer's own end handler, so the page is no longer presenting when the view is reported.
+    session.addEventListener('end', () => this.xrEnded());
+    // The headset moved its origin (the user recentred the headset): place the panel in front of them again.
+    this.renderer.xr.getReferenceSpace()?.addEventListener('reset', () => this.recenter());
+    if (this.xrButton) this.xrButton.style.display = 'none';
+    this.xrFrames = 0;
+    setTimeout(() => {
+      if (this.presenting && this.xrFrames === 0) console.warn('[xrb] the headset session shows nothing: drive frames with xrb.setAnimationLoop(fn), requestAnimationFrame stops in a session');
+    }, 3000);
+    this.emitView();
+  }
+
+  /** Ends the headset session. */
+  async exitXR(): Promise<void> {
+    await (this.renderer.xr.getSession() as unknown as XrSessionLike | null)?.end();
+  }
+
+  /** Places the virtual panel in front of the user again (next frame). */
+  recenter(): void {
+    this.xrPanel.reset();
+  }
+
+  private async detectXr(): Promise<void> {
+    const xr = navigatorXr();
+    this.xrMode = await detectXrMode(xr, this.xrOptions.mode);
+    if (!this.xrMode) return;
+    if (this.xrOptions.button !== false && typeof document !== 'undefined') this.addXrButton();
+    // An installed immersive app starts without a page to tap: its launch is the gesture. A browser that
+    // navigated here from a session grants the next one too ('sessiongranted').
+    const enter = () => void this.enterXR().catch((e) => console.warn('[xrb] could not start the headset session:', e));
+    xr?.addEventListener?.('sessiongranted', enter);
+    const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
+    if (this.xrOptions.autoEnter ?? wantsAutoEnter(search)) enter();
+  }
+
+  private addXrButton(): void {
+    const b = document.createElement('button');
+    b.textContent = 'Enter';
+    b.title = 'Show the app in the headset';
+    Object.assign(b.style, {
+      position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: '2147483647',
+      padding: '12px 28px', border: '1px solid #ffffff55', borderRadius: '24px', background: '#000000aa',
+      color: '#fff', font: '600 16px system-ui, sans-serif', cursor: 'pointer',
+    });
+    b.addEventListener('click', () => void this.enterXR().catch((e) => console.warn('[xrb] could not start the headset session:', e)));
+    document.body.appendChild(b);
+    this.xrButton = b;
+  }
+
+  private xrEnded(): void {
+    this.renderer.xr.enabled = false;
+    if (this.xrButton) this.xrButton.style.display = '';
+    this.setSize();
+    this.emitView();
+  }
+
+  private emitView(): void {
+    const view: XrbView = { stereo: this.stereo, switchable: this.switchable };
+    for (const fn of this.viewListeners) fn(view);
   }
 
   /** true when the host can switch between 2D and 3D while the app runs (its display has a switchable session). */
@@ -155,6 +262,7 @@ export class Xrb {
    * and resizes the page, then confirms with a view message; in a browser the canvas changes at once.
    */
   setStereo(stereo: boolean): void {
+    if (this.presenting) return;  // a headset always shows both eyes
     if (this.channel && this.switchable) {
       this.channel.sendSetView(stereo);
       return;
@@ -173,9 +281,7 @@ export class Xrb {
     this._stereo = stereo;
     this.view.setStereo(stereo);
     this.setSize();
-    if (!changed) return;
-    const view: XrbView = { stereo, switchable: this.switchable };
-    for (const fn of this.viewListeners) fn(view);
+    if (changed) this.emitView();
   }
 
   /** Size of one eye's view in CSS pixels: use it for your camera aspect and UI layout. */
@@ -191,6 +297,7 @@ export class Xrb {
       this.renderer.setSize(this.icon.size, this.icon.size);
       return;
     }
+    if (this.presenting) return;  // the headset sizes its own views
     if (!this.host) this.view.setEyeSize(innerWidth, innerHeight);
     this.view.applyCanvasSize();
   }
@@ -267,14 +374,18 @@ export class Xrb {
       return;
     }
     const now = performance.now();
+    const xr = this.presenting;
     const e = this.channel?.eyes;
-    if (e) {
+    if (xr) {
+      this.readXr(now);
+    } else if (e) {
       const f = this.eyeFilters;
       const L = e.left.map((v, i) => f[i].filter(v, now)) as Vec3;
       const R = e.right.map((v, i) => f[3 + i].filter(v, now)) as Vec3;
       this.currentEyes = { left: L, right: R };
     }
-    this.currentHands = this.hands.sample(now + this.displayLatencyMs);
+    // Headset joints are already predicted to the frame's display time by the headset.
+    this.currentHands = this.hands.sample(xr ? now : now + this.displayLatencyMs);
     // The panel frame follows the camera, so update it before using it for hands.
     this.view.panel.update(this.view.mapping, camera);
     this.sceneHands = this.currentHands.map((h) => toSceneHand(h, this.view.panel));
@@ -288,7 +399,8 @@ export class Xrb {
     const l = this.currentEyes.left, r = this.currentEyes.right;
     this.pointer?.update(this.currentHands, [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2], this.display);
     const t0 = performance.now();
-    this.view.render(scene, camera, this.currentEyes);
+    if (xr) this.drawXr(scene, camera);
+    else this.view.render(scene, camera, this.currentEyes);
     this.renderMs = performance.now() - t0;
 
     if (this.lastFrameAt > 0) {
@@ -322,6 +434,44 @@ export class Xrb {
       eyeWidth: eye.width * scale,
       eyeHeight: eye.height * scale,
     };
+  }
+
+  /** Headset frame: anchors the virtual panel, then reads the eyes and hands in its frame. */
+  private readXr(now: number): void {
+    this.xrFrames++;
+    const frame = this.renderer.xr.getFrame() as unknown as XrFrameLike | null;
+    const space = this.renderer.xr.getReferenceSpace();
+    if (!frame || !space) return;
+    const pose = frame.getViewerPose(space);
+    if (pose && !this.xrPanel.anchored) {
+      const head = headOf(pose);
+      this.xrPanel.anchor(head.position, head.quaternion);
+    }
+    if (!this.xrPanel.anchored) return;
+    if (pose) this.currentEyes = eyesInPanel(pose, this.xrPanel);
+    this.hands.push(this.xrHands.read(frame, space, this.xrPanel, now), now);
+  }
+
+  /** Both eyes through the headset; the XR camera's parent puts the virtual panel where the mapping puts the panel. */
+  private drawXr(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void {
+    this.view.syncHeadCamera(camera);
+    const panel = this.view.panel;
+    rigMatrix(panel.toWorld, this.xrPanel, this.xrRig.matrix);
+    this.xrRig.updateMatrixWorld(true);
+    // The headset's projections are in metres; the rig scales metres to scene units.
+    this.xrCamera.near = camera.near / panel.scale;
+    this.xrCamera.far = camera.far / panel.scale;
+    const passthrough = this.xrMode === 'immersive-ar' && this.xrOptions.passthroughBackground !== false;
+    const background = scene.background, clearAlpha = this.renderer.getClearAlpha();
+    if (passthrough) {
+      scene.background = null;
+      this.renderer.setClearAlpha(0);
+    }
+    this.renderer.render(scene, this.xrCamera);
+    if (passthrough) {
+      scene.background = background;
+      this.renderer.setClearAlpha(clearAlpha);
+    }
   }
 
   /** Icon view: the canvas alone at the top left, transparent page. */
@@ -374,6 +524,8 @@ export class Xrb {
 
   dispose(): void {
     this.channel?.close();
+    this.xrButton?.remove();
+    void this.exitXR();
   }
 }
 

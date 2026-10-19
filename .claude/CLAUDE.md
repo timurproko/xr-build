@@ -48,7 +48,8 @@ user's **workspace** (`XRB_HOME`, else `%USERPROFILE%\.xr-build`), a separate pr
   found in `<exe>\plugins\<name>\` and every `--plugin-dir=`. `<exe>\xrb-app.json` names the providers a
   packaged app starts with.
 - `native/plugin-sdk` - the C ABI header plugins build against.
-- `packages/sdk` - `@xr-build/sdk`, JS SDK for three.js apps (`createXrb()`: stereo rig, hand input, pointer emulation).
+- `packages/sdk` - `@xr-build/sdk`, JS SDK for three.js apps (`createXrb()`: stereo rig, hand input, pointer emulation;
+  without a host, a WebXR headset session with the headset's hands and a virtual panel, `src/webxr.ts`).
 - `packages/ui-kit` - `@xr-build/ui-kit`, 3D controls on the SDK's interaction core.
 - `packages/app-icon` - app icons: default icon and colours, `.ico`, `app-icon render` (the app renders its own icon).
 - `packages/control-panel` - local control panel (Node server on 127.0.0.1:5180 + browser UI) over the workspace:
@@ -143,6 +144,10 @@ Logs: `%LOCALAPPDATA%\XRBuild\logs` (`xrb-host.log`).
 - Windows file times move in ~16 ms ticks: a test that writes a file and checks its mtime changed must date it back first.
 - Windows may hand out 8.3 short paths (`USERNA~1`) for the same folder as the long one: compare paths only after
   `realpathSync.native` (the name guard's hook does).
+- Build target: a project's `target` is `host` (unset; xrb-host on a display with providers) or `webxr` (a standalone
+  headset runs the app in its browser engine, no host, no providers). A packager declares `target` (default `host`);
+  a `webxr` packager gets the web app, icon and identity only (`runtimeDir` "", no plugins). The headset's packager
+  is a workspace plugin. Apps drive frames with `xrb.setAnimationLoop`: `requestAnimationFrame` stops in a session.
 - 2D/3D while the app runs: a display with a switchable session keeps it and only toggles its 3D output; the page is
   resized mono <-> side by side; asked over the channel (`kSetView`: the SDK's `xrb.setStereo()` or the panel's
   "2D mode" checkbox), confirmed with `kView`. `--view=2d` starts a session in 2D.

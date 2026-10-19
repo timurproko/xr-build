@@ -1,5 +1,5 @@
 // A new XR Build app: three cubes at different depths, click or pinch to select one.
-// Runs in xrb-host (3D display, hands) and in a browser.
+// Runs in xrb-host (3D display, hands), in a browser, and on a WebXR headset (Enter).
 import * as THREE from 'three';
 import { createXrb, rendererOptions } from '@xr-build/sdk';
 
@@ -48,9 +48,8 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 
-function animate(t) {
+// xrb drives the frames: the browser's, or the headset's while a WebXR session runs.
+xrb.setAnimationLoop((t) => {
   cubes.forEach((c, i) => (c.rotation.y = (t / 1000) * (0.3 + i * 0.1)));
   xrb.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-requestAnimationFrame(animate);
+});

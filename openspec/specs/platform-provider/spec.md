@@ -5,6 +5,7 @@ Defines how a station platform launches and controls an XR Build app and how app
 the control panel work with any platform, or none.
 
 ## Requirements
+
 ### Requirement: Standalone by default
 With no platform provider selected the host SHALL run the app standalone: it SHALL NOT open any station connection,
 and it SHALL exit only on its own quit paths (window close, `--exit-after=`, the page or the panel).
@@ -69,3 +70,24 @@ command-line options and without any workspace.
 #### Scenario: Unselected plugins left out
 - **WHEN** a project selects input `none`
 - **THEN** the package contains no input plugin and no tracker runtime files
+
+### Requirement: Packager target
+A packager SHALL declare the target its packages run on: `host` (xrb-host with the selected plugins, the default when
+it declares none) or `webxr` (a standalone headset). A project SHALL use only packagers of its own target.
+
+#### Scenario: Packager without a target
+- **WHEN** a packager declares no target
+- **THEN** it is treated as a `host` packager and works unchanged
+
+#### Scenario: Unknown target
+- **WHEN** a packager declares a target other than `host` or `webxr`
+- **THEN** it is not loaded and the panel reports the problem
+
+### Requirement: Headset packages
+A `webxr` packager's build step SHALL turn the built app, its icon and identity into a package for a standalone
+headset, and SHALL receive no host runtime (`runtimeDir` empty), no plugins and no `pluginDirs`.
+
+#### Scenario: Headset package
+- **WHEN** a project with target `webxr` and platform `headset` is packaged
+- **THEN** the `headset` packager receives the built app, icon and identity, no host runtime and no plugins, and
+  writes one package file to the workspace's `builds/`
