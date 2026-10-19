@@ -33,6 +33,7 @@ export interface XrFrameLike {
   getJointPose?(joint: unknown, space: unknown): XrPose | null | undefined;
 }
 export interface XrSystemLike {
+  addEventListener?(type: 'sessiongranted', fn: () => void): void;
   isSessionSupported(mode: XrMode): Promise<boolean>;
   requestSession(mode: XrMode, init?: { optionalFeatures?: string[]; requiredFeatures?: string[] }): Promise<XrSessionLike>;
 }
@@ -54,6 +55,12 @@ export interface XrOptions {
   button?: boolean;
   /** hide the scene background in passthrough so the room shows through; default true */
   passthroughBackground?: boolean;
+  /**
+   * enter the session as soon as it is available, without the Enter button: for an app installed as an
+   * immersive headset app, whose launch counts as the user's gesture. Default: the page URL has `xrb-xr=enter`
+   * (what a headset packager puts in the app's start address).
+   */
+  autoEnter?: boolean;
   panel?: XrPanelOptions;
 }
 
@@ -86,6 +93,11 @@ export async function detectXrMode(xr: XrSystemLike | null | undefined, preferre
     }
   }
   return null;
+}
+
+/** Whether a page address asks to enter the headset session at once (`?xrb-xr=enter`). */
+export function wantsAutoEnter(search: string): boolean {
+  return new URLSearchParams(search).get('xrb-xr') === 'enter';
 }
 
 /** The size of the virtual panel as the display the SDK renders for. */

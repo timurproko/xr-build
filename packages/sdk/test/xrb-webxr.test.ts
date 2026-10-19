@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Xrb, type XrbView } from '../src/index.ts';
-import type { XrMode } from '../src/webxr.ts';
+import { wantsAutoEnter, type XrMode } from '../src/webxr.ts';
 
 const g = globalThis as Record<string, unknown>;
 g.innerWidth ??= 1280;
@@ -16,17 +16,27 @@ class FakeSession extends EventTarget {
   }
 }
 
+class FakeXr extends EventTarget {
+  readonly requests: { mode: XrMode; init: unknown }[] = [];
+  readonly supported: XrMode[];
+  constructor(supported: XrMode[]) {
+    super();
+    this.supported = supported;
+  }
+  async isSessionSupported(mode: XrMode) {
+    return this.supported.includes(mode);
+  }
+  async requestSession(mode: XrMode, init: unknown) {
+    this.requests.push({ mode, init });
+    return new FakeSession();
+  }
+}
+
+let currentXr: FakeXr | null = null;
 function setXr(supported: XrMode[] | null) {
-  const requests: { mode: XrMode; init: unknown }[] = [];
-  const xr = supported && {
-    isSessionSupported: async (mode: XrMode) => supported.includes(mode),
-    requestSession: async (mode: XrMode, init: unknown) => {
-      requests.push({ mode, init });
-      return new FakeSession();
-    },
-  };
-  Object.defineProperty(globalThis.navigator, 'xr', { value: xr ?? undefined, configurable: true });
-  return requests;
+  currentXr = supported && new FakeXr(supported);
+  Object.defineProperty(globalThis.navigator, 'xr', { value: currentXr ?? undefined, configurable: true });
+  return currentXr?.requests ?? [];
 }
 
 const pose = (x: number, y: number, z: number) => ({ transform: { position: { x, y, z }, orientation: { x: 0, y: 0, z: 0, w: 1 } } });
@@ -156,6 +166,34 @@ test('recenter re-anchors the panel on the next frame, and a reference space res
   assert.equal(panel.anchored, true);
   renderer.space.dispatchEvent(new Event('reset'));
   assert.equal(panel.anchored, false);
+  await xrb.exitXR();
+});
+
+test('an installed immersive app enters the session at once (autoEnter), without the Enter button', async () => {
+  const requests = setXr(['immersive-ar']);
+  const renderer = fakeRenderer();
+  const xrb = new Xrb(renderer as unknown as THREE.WebGLRenderer, { pointer: false, xr: { button: false, autoEnter: true } });
+  for (let i = 0; i < 5 && !xrb.presenting; i++) await tick();
+  assert.equal(requests.length, 1);
+  assert.equal(xrb.presenting, true);
+  await xrb.exitXR();
+});
+
+test('the start address ?xrb-xr=enter asks for auto-enter; other pages wait for Enter', () => {
+  assert.equal(wantsAutoEnter('?xrb-xr=enter'), true);
+  assert.equal(wantsAutoEnter('?a=1&xrb-xr=enter'), true);
+  assert.equal(wantsAutoEnter(''), false);
+  assert.equal(wantsAutoEnter('?xrb-xr=off'), false);
+});
+
+test('without autoEnter the session waits, and a granted session (sessiongranted) starts it', async () => {
+  const requests = setXr(['immersive-vr']);
+  const xrb = new Xrb(fakeRenderer() as unknown as THREE.WebGLRenderer, { pointer: false, xr: { button: false } });
+  await tick();
+  assert.equal(requests.length, 0);
+  currentXr!.dispatchEvent(new Event('sessiongranted'));
+  for (let i = 0; i < 5 && !xrb.presenting; i++) await tick();
+  assert.equal(requests.length, 1);
   await xrb.exitXR();
 });
 

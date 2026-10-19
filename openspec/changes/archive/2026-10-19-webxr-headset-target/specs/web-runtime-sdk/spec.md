@@ -16,6 +16,10 @@ when no session is offered. Passthrough SHALL be used when supported unless the 
 - **WHEN** the same build is opened in a desktop browser that offers no immersive session
 - **THEN** no Enter button is shown and the app renders one view as before
 
+#### Scenario: Installed immersive app
+- **WHEN** the page is opened with `?xrb-xr=enter` (an installed headset app's start address) or the browser grants a session after a navigation (`sessiongranted`)
+- **THEN** the SDK enters the session without the user pressing Enter
+
 ### Requirement: Headset hands
 In a WebXR session the SDK SHALL read the headset's tracked hand joints every frame, map them to the 21-keypoint hand
 in the panel frame, and feed them to the same hand input, lifecycle events and interaction core as host hands,

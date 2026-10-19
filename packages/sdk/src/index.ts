@@ -22,7 +22,7 @@ import { PointerEmulation } from './pointer.ts';
 import { ALL_CAPABILITIES, type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, StereoRenderer, type EyePair, type PanelMapping } from './stereo.ts';
-import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
+import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
 export { HostChannel } from './channel.ts';
@@ -39,7 +39,7 @@ export { iconRender, iconReady, iconServing, serveIconCapture, type IconRequest,
 export { OneEuro, DEFAULT_ONE_EURO } from './one-euro.ts';
 export { PointerEmulation, projectToPanel, choosePointerHand } from './pointer.ts';
 export { offAxisProjection, PanelFrame, StereoRenderer, NOMINAL_EYE, type PanelMapping } from './stereo.ts';
-export { detectXrMode, VirtualPanel, XrHands, XR_JOINTS, XR_PANEL_DEFAULTS, type XrMode, type XrOptions, type XrPanelOptions } from './webxr.ts';
+export { detectXrMode, VirtualPanel, wantsAutoEnter, XrHands, XR_JOINTS, XR_PANEL_DEFAULTS, type XrMode, type XrOptions, type XrPanelOptions } from './webxr.ts';
 
 export interface XrbOptions {
   /** how panel metres map into the scene; default: panel in front of your camera */
@@ -214,8 +214,16 @@ export class Xrb {
   }
 
   private async detectXr(): Promise<void> {
-    this.xrMode = await detectXrMode(navigatorXr(), this.xrOptions.mode);
-    if (this.xrMode && this.xrOptions.button !== false && typeof document !== 'undefined') this.addXrButton();
+    const xr = navigatorXr();
+    this.xrMode = await detectXrMode(xr, this.xrOptions.mode);
+    if (!this.xrMode) return;
+    if (this.xrOptions.button !== false && typeof document !== 'undefined') this.addXrButton();
+    // An installed immersive app starts without a page to tap: its launch is the gesture. A browser that
+    // navigated here from a session grants the next one too ('sessiongranted').
+    const enter = () => void this.enterXR().catch((e) => console.warn('[xrb] could not start the headset session:', e));
+    xr?.addEventListener?.('sessiongranted', enter);
+    const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
+    if (this.xrOptions.autoEnter ?? wantsAutoEnter(search)) enter();
   }
 
   private addXrButton(): void {

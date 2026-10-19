@@ -228,6 +228,10 @@ button (`xr: { button: false }` hides it; call `xrb.enterXR()` from your own ges
 - **Passthrough.** `immersive-ar` is used when offered, else `immersive-vr` (`xr.mode` picks one). In
   passthrough the scene background is hidden while drawing so the room shows through
   (`passthroughBackground: false` keeps it).
+- **Installed apps.** An app installed as an immersive headset app has no page to tap: with `?xrb-xr=enter` in
+  its address (a headset packager puts it in the app's start address) or `xr: { autoEnter: true }`, the SDK
+  enters the session as soon as it is available. It also enters when the browser grants a session after a
+  navigation from one (`sessiongranted`).
 
 ```ts
 const xrb = createXrb(renderer, { xr: { panel: { distanceM: 0.5 } } });
