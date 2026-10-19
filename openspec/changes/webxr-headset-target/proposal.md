@@ -14,8 +14,9 @@ built for, and the platform's packager needs to know that a headset package carr
   WebXR, no host and no providers). Stored as `target` in `xrb-project.json`.
 - **WebXR runtime in the SDK.** `createXrb()` gains a WebXR backend. When the page runs without a host and the browser
   offers an immersive WebXR session, the SDK starts it on request (an "Enter" button or `xrb.enterXR()`), lets the
-  WebXR renderer draw both eyes, and reads the headset's hand joints into the same `Hand` stream, events and
-  interaction core the host's hands feed. ui-kit controls work unchanged.
+  WebXR renderer draw both eyes, and reads the headset's hand joints into the same `Hand` stream, events,
+  interaction core and pointer emulation the host's hands feed. ui-kit controls work unchanged. Apps drive frames
+  with `xrb.setAnimationLoop` (a page's own animation frames stop in a session); the app template does.
 - **Virtual panel.** On a headset the SDK places a virtual panel (default size and pose, app-tunable) in the room when
   the session starts. The app's scene-to-panel mapping and the controls' physical sizes keep their meaning.
 - **Packager target.** A packager declares the target it builds for (`host` by default). A `webxr` packager gets the
