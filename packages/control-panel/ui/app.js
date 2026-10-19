@@ -577,7 +577,9 @@ function openMenu(x, y, projectId) {
   arch.disabled = !!p?.running;
   placeMenu(menu, x, y);
 }
-const closeMenu = () => document.querySelectorAll('.menu').forEach((m) => { m.hidden = true; });
+// A dropdown's option list is a .menu too, but it closes itself (closeDropdown): hiding it here would hide
+// the list the same click just opened.
+const closeMenu = () => document.querySelectorAll('.menu:not(.dropdown-list)').forEach((m) => { m.hidden = true; });
 
 $('#sec-menu').addEventListener('click', action(async (e) => {
   const act = e.target.closest('button')?.dataset.act;
@@ -956,14 +958,14 @@ function renderDetail(force = false) {
   const settings = `<form id="settings">
       <div class="grid3">
         ${field('Title', 'name', m.name)}
-        ${m.kind === 'app' ? field('Target', 'target', m.target ?? '', {
-          options: ['', 'webxr'], defaultLabel: 'Host', labels: { webxr: 'WebXR headset' },
-          title: 'Host: xrb-host on a display, with display, input and platform providers.\nWebXR headset: a standalone headset runs the app in its browser engine, with its own hand tracking; no host.',
-        }) : ''}
         ${headset ? '' : roleField('Display', 'display', m.display, 'desktop')}
         ${headset ? '' : roleField('Input', 'input', m.input, 'none')}
       </div>
       <div class="grid3">
+        ${m.kind === 'app' ? field('Target', 'target', m.target ?? '', {
+          options: ['', 'webxr'], defaultLabel: 'Host', labels: { webxr: 'WebXR headset' },
+          title: 'Host: xrb-host on a display, with display, input and platform providers.\nWebXR headset: a standalone headset runs the app in its browser engine, with its own hand tracking; no host.',
+        }) : ''}
         ${m.kind === 'app' ? roleField('Platform', 'platform', m.platform, 'standalone', headset) : ''}
         ${identityFields(p)}
       </div>
