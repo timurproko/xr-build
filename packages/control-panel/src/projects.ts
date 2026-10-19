@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { ICON_COLORS, isIconColor, type IconColor } from '../../app-icon/src/icon.ts';
-import type { RoleSelection } from './packagers.ts';
+import { BUILD_TARGETS, type BuildTarget, type RoleSelection } from './packagers.ts';
 
 export const MANIFEST = 'xrb-project.json';
 export type ProjectKind = 'app' | 'test';
@@ -20,6 +20,8 @@ export interface Manifest {
   icon?: string;
   /** colour of the generated default icon while there is no `icon` (blue when unset) */
   iconColor?: IconColor;
+  /** what the app is built for: `host` (unset; xrb-host on a display) or `webxr` (a standalone headset, no host or providers) */
+  target?: BuildTarget;
   /** providers per role, built in or plugin names (`xrb-host --list-plugins`); unset: none, desktop, standalone */
   input?: string;
   display?: string;
@@ -83,6 +85,7 @@ export function validateManifest(m: unknown, projectDir: string): FieldError[] {
     else if (field === 'icon' && !v.toLowerCase().endsWith('.png')) err('icon', 'icon must be a PNG file');
   }
   if (o.iconColor !== undefined && !isIconColor(o.iconColor)) err('iconColor', `iconColor must be one of ${Object.keys(ICON_COLORS).join(', ')}`);
+  if (o.target !== undefined && !BUILD_TARGETS.includes(o.target as BuildTarget)) err('target', `target must be one of ${BUILD_TARGETS.join(', ')}`);
   if (o.scripts !== undefined) {
     const s = o.scripts as Record<string, unknown>;
     if (!s || typeof s !== 'object') err('scripts', 'scripts must be an object');
@@ -131,6 +134,11 @@ export function validateManifest(m: unknown, projectDir: string): FieldError[] {
 /** Which provider runs each role for a project (unset: no hands, the desktop display, standalone). */
 export function selectionOf(m: Manifest): RoleSelection {
   return { input: m.input ?? 'none', display: m.display ?? 'desktop', platform: m.platform ?? '' };
+}
+
+/** What the project is built for (`host` when unset). */
+export function buildTargetOf(m: Manifest): BuildTarget {
+  return m.target ?? 'host';
 }
 
 /** The package identity: the platform's section of `plugins` (null standalone or without one). */

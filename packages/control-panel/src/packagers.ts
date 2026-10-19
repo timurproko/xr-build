@@ -26,6 +26,13 @@ export interface IdentityError {
   message: string;
 }
 
+/**
+ * What a project is built for: `host` = xrb-host on a display, with display, input and platform providers;
+ * `webxr` = a standalone headset running the app in its browser engine through WebXR (no host, no providers).
+ */
+export type BuildTarget = 'host' | 'webxr';
+export const BUILD_TARGETS: readonly BuildTarget[] = ['host', 'webxr'];
+
 /** Which provider runs each role (the project's selection). */
 export interface RoleSelection {
   input: string;
@@ -37,14 +44,14 @@ export interface RoleSelection {
 export interface PackagerBuildOptions {
   /** built web app (index.html at its root) */
   app: string;
-  /** xrb-host build output: the exe and CEF */
+  /** xrb-host build output: the exe and CEF ("" for a `webxr` packager: a headset package carries no host) */
   runtimeDir: string;
   /**
    * Where each selected plugin's built files are: plugin name -> folder (a workspace plugin's bin/).
    * Ship each into the package's plugins/<name>/. Unset (an older caller): `<runtimeDir>/plugins/<name>`.
    */
   pluginDirs?: Record<string, string>;
-  /** plugin names to ship (the selected ones that are plugins, not built-ins) */
+  /** plugin names to ship (the selected ones that are plugins, not built-ins); empty for a `webxr` packager */
   plugins: string[];
   selection: RoleSelection;
   /** the manifest's `plugins.<platform>` section: the declared identity fields, version included */
@@ -66,6 +73,8 @@ export interface PackagerBuildResult {
 export interface Packager {
   /** platform name, as projects select it (e.g. "station") */
   name: string;
+  /** the target its packages run on; unset: `host` (it ships xrb-host and the selected plugins) */
+  target?: BuildTarget;
   identityFields: IdentityField[];
   validate(identity: Record<string, unknown>): IdentityError[];
   build(o: PackagerBuildOptions): Promise<PackagerBuildResult>;
@@ -98,7 +107,13 @@ export function pluginDirOf(o: Pick<PackagerBuildOptions, 'runtimeDir' | 'plugin
 
 function isPackager(p: unknown): p is Packager {
   const o = p as Partial<Packager> | null;
-  return !!o && typeof o.name === 'string' && !!o.name && Array.isArray(o.identityFields) && typeof o.validate === 'function' && typeof o.build === 'function';
+  return !!o && typeof o.name === 'string' && !!o.name && Array.isArray(o.identityFields) && typeof o.validate === 'function' && typeof o.build === 'function'
+    && (o.target === undefined || BUILD_TARGETS.includes(o.target));
+}
+
+/** The target a packager builds for (`host` when it declares none). */
+export function targetOf(p: Packager): BuildTarget {
+  return p.target ?? 'host';
 }
 
 /** Finds and loads every declared packager. A module exports the contract as `packager` (or default). */
@@ -120,7 +135,7 @@ export async function discoverPackagers(repo: string, workspace: string): Promis
     try {
       const mod = (await import(pathToFileURL(path.resolve(dir, decl)).href)) as { packager?: unknown; default?: unknown };
       const p = mod.packager ?? mod.default;
-      if (!isPackager(p)) throw new Error('the module does not export a packager (name, identityFields, validate, build)');
+      if (!isPackager(p)) throw new Error(`the module does not export a packager (name, identityFields, validate, build; target ${BUILD_TARGETS.join(' or ')} when set)`);
       if (found.some((f) => f.packager.name === p.name)) throw new Error(`a packager named "${p.name}" is already loaded`);
       found.push({ packager: p, dir });
     } catch (e) {
@@ -133,4 +148,9 @@ export async function discoverPackagers(repo: string, workspace: string): Promis
 /** The packager for a platform; null when the project runs standalone or no plugin packages for it. */
 export function packagerFor(d: PackagerDiscovery, platform: string): FoundPackager | null {
   return platform ? (d.found.find((f) => f.packager.name === platform) ?? null) : null;
+}
+
+/** Platform names a project of `target` can select (the packagers building for that target). */
+export function platformsFor(d: PackagerDiscovery, target: BuildTarget): string[] {
+  return d.found.filter((f) => targetOf(f.packager) === target).map((f) => f.packager.name);
 }

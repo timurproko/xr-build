@@ -12,13 +12,14 @@ import { hostFreshness, hostPaths, listProviders, pluginBinDirs, rebuildHost } f
 import { HostRunner, type RunMode } from './host-runner.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
-import { discoverPackagers, packagerFor, type IdentityField, type PackagerDiscovery } from './packagers.ts';
+import { discoverPackagers, packagerFor, platformsFor, targetOf, type BuildTarget, type IdentityField, type PackagerDiscovery } from './packagers.ts';
 import { PackageList } from './packages.ts';
-import { ARCHIVE, compareVersions, defaultEntry, discoverAll, identityOf, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
+import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, discoverAll, identityOf, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, unarchiveProject } from './layout.ts';
 
 /** Providers compiled into xrb-host: never shipped as plugin folders. */
 const BUILTIN_PROVIDERS = new Set(['desktop', 'none', 'replay', 'simulated']);
+const TARGET_LABEL: Record<BuildTarget, string> = { host: 'Host', webxr: 'WebXR headset' };
 const APP_ICON = path.join('packages', 'app-icon', 'src', 'cli.ts');
 const OPEN_FOLDER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'open-folder.ps1');
 const RECYCLE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'recycle.ps1');
@@ -177,6 +178,8 @@ export class Panel {
     if (!platform) return none('', 'the app runs standalone (no platform)');
     const found = packagerFor(this.packagers, platform);
     if (!found) return none(platform, `no packager plugin for platform "${platform}"`);
+    const target = buildTargetOf(m);
+    if (targetOf(found.packager) !== target) return none(platform, `the "${platform}" packager builds for the ${TARGET_LABEL[targetOf(found.packager)]} target, the app is set to ${TARGET_LABEL[target]}`);
     const errors = found.packager.validate(identityOf(m) ?? {}).map((e) => ({ field: `plugins.${platform}.${e.field}`, message: e.message }));
     return { available: true, platform, packager: found.packager.name, fields: found.packager.identityFields, errors, reason: null };
   }
@@ -198,25 +201,33 @@ export class Panel {
     const last = [str('lastPackaged'), zipVersion ?? undefined].filter((v): v is string => !!v).sort(compareVersions).pop();
     if (last && compareVersions(version, last) <= 0 && !confirm.has('version'))
       throw new HttpError(409, `version ${version} is not higher than ${last}, which was already packaged: a station may reject a version that exists. Use ${nextVersion(last)}?`, { needsConfirm: 'version', suggested: nextVersion(last) });
-    const fresh = hostFreshness(this.repo, this.workspace);
-    if (!fresh.exists) throw new HttpError(409, 'xrb-host.exe is not built: rebuild the host first');
-    if (fresh.outdated && !confirm.has('host'))
-      throw new HttpError(409, `xrb-host.exe is older than ${fresh.newestSource}: the package would ship an outdated host. Rebuild the host first?`, { needsConfirm: 'host' });
-    // The selected providers that are plugins go into the package; each must be built in the workspace.
-    const runtimeDir = hostPaths(this.repo).releaseDir;
-    const pluginDirs = await this.pluginDirs();
+    // A headset package carries the web app only: no host, no plugins (packager contract, target webxr).
+    const headset = buildTargetOf(m) === 'webxr';
+    let runtimeDir = '', pluginDirs: Record<string, string> = {}, plugins: string[] = [];
     const selection = selectionOf(m);
-    const plugins = [selection.input, selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
-    const missing = plugins.filter((n) => !pluginDirs[n]);
-    if (missing.length) throw new HttpError(409, `plugin ${missing.join(', ')} is not built in the workspace: rebuild the host first`);
+    if (!headset) {
+      const fresh = hostFreshness(this.repo, this.workspace);
+      if (!fresh.exists) throw new HttpError(409, 'xrb-host.exe is not built: rebuild the host first');
+      if (fresh.outdated && !confirm.has('host'))
+        throw new HttpError(409, `xrb-host.exe is older than ${fresh.newestSource}: the package would ship an outdated host. Rebuild the host first?`, { needsConfirm: 'host' });
+      // The selected providers that are plugins go into the package; each must be built in the workspace.
+      runtimeDir = hostPaths(this.repo).releaseDir;
+      const built = await this.pluginDirs();
+      plugins = [selection.input, selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
+      const missing = plugins.filter((n) => !built[n]);
+      if (missing.length) throw new HttpError(409, `plugin ${missing.join(', ')} is not built in the workspace: rebuild the host first`);
+      pluginDirs = Object.fromEntries(plugins.map((n) => [n, built[n]]));
+    }
     const packager = packagerFor(this.packagers, packaging.platform)!.packager;
     const identity = Object.fromEntries(Object.entries({ ...id, version }).filter((e): e is [string, string] => typeof e[1] === 'string'));
     const label = str('id') ?? m.name;
     const platform = packaging.platform;
     return this.startJob('package', p.id, `package (${packager.name}): ${label} ${version}`, async (ctx: JobContext) => {
-      ctx.line(`${packager.name} package of ${p.id} ${version}: ${selection.display} + ${selection.input} + ${selection.platform}; plugins ${plugins.join(', ') || 'none'}`);
+      ctx.line(headset
+        ? `${packager.name} package of ${p.id} ${version}: WebXR headset app (no host)`
+        : `${packager.name} package of ${p.id} ${version}: ${selection.display} + ${selection.input} + ${selection.platform}; plugins ${plugins.join(', ') || 'none'}`);
       const r = await packager.build({
-        app: entry, runtimeDir, pluginDirs: Object.fromEntries(plugins.map((n) => [n, pluginDirs[n]])), plugins, selection, identity,
+        app: entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, identity,
         icon: m.icon ? path.resolve(p.dir, m.icon) : undefined, iconColor: m.iconColor,
         out: path.join(this.workspace, 'builds'), log: (msg) => ctx.line(msg),
       });
@@ -239,6 +250,7 @@ export class Panel {
   /** flat: 2D mode, the app starts mono without the 3D effect (--view=2d); switchable while it runs. */
   async run(p: Project, mode: RunMode, flat = false, cameraView = false): Promise<void> {
     const m = this.manifestOf(p);
+    if (buildTargetOf(m) === 'webxr') throw new HttpError(409, `${p.id} is a WebXR headset app: open it in a browser, or build a package for the headset`);
     const fresh = hostFreshness(this.repo, this.workspace);
     if (!fresh.exists) throw new HttpError(409, 'xrb-host.exe is not built: rebuild the host first');
     if (this.runner.busy) throw new HttpError(409, `${this.runner.projectId} is running: stop it first`);
@@ -383,8 +395,12 @@ export class Panel {
         sendJson(res, 200, { ...hostFreshness(this.repo, this.workspace), workspace: this.workspace });
         return true;
       case 'GET plugins':
-        // What a project can select: the host's providers, and the platforms a packager plugin packages for.
-        sendJson(res, 200, { ...(await listProviders(this.repo, this.workspace)), packagers: this.packagers.found.map((f) => f.packager.name), packagerProblems: this.packagers.problems });
+        // What a project can select: the host's providers, and the platforms a packager plugin packages for
+        // (`packagers`: for host apps; `headsetPlatforms`: for WebXR headset apps).
+        sendJson(res, 200, {
+          ...(await listProviders(this.repo, this.workspace)),
+          packagers: platformsFor(this.packagers, 'host'), headsetPlatforms: platformsFor(this.packagers, 'webxr'), packagerProblems: this.packagers.problems,
+        });
         return true;
       case 'POST host/rebuild':
         if (this.runner.busy) throw new HttpError(409, 'stop the running host first: its exe is locked while it runs');

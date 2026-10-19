@@ -701,16 +701,25 @@ function syncIdentityTitle(m, oldName) {
 
 const selected = () => allProjects().find((p) => p.id === state.selected) ?? null;
 
-/** An option's text: `data-default` names the empty choice, `data-raw` keeps names as they are (provider names). */
-const optionLabel = (o, owner) => (!o ? (owner?.dataset.default || 'Default') : owner?.dataset.raw ? o : o[0].toUpperCase() + o.slice(1));
+/**
+ * An option's text: `data-default` names the empty choice, `data-labels` ("value:Text|...") names others,
+ * `data-raw` keeps names as they are (provider names).
+ */
+const optionLabel = (o, owner) => {
+  if (!o) return owner?.dataset.default || 'Default';
+  const named = (owner?.dataset.labels ?? '').split('|').map((x) => x.split(':')).find(([v]) => v === o);
+  if (named) return named[1];
+  return owner?.dataset.raw ? o : o[0].toUpperCase() + o.slice(1);
+};
 
 function field(label, name, value, opts = {}) {
   const err = state.fieldErrors[name];
   // Options: the panel's own dropdown (the browser's option list cannot be styled). A hidden
   // input carries the value, so the form and its autosave treat it like any field.
-  const owner = { dataset: { default: opts.defaultLabel ?? '', raw: opts.raw ? '1' : '' } };
+  const labels = Object.entries(opts.labels ?? {}).map(([v, t]) => `${v}:${t}`).join('|');
+  const owner = { dataset: { default: opts.defaultLabel ?? '', raw: opts.raw ? '1' : '', labels } };
   const input = opts.options
-    ? `<div class="dropdown" data-options="${esc(opts.options.join('|'))}" data-default="${esc(opts.defaultLabel ?? '')}" ${opts.raw ? 'data-raw="1"' : ''} ${opts.title ? `title="${esc(opts.title)}"` : ''}>
+    ? `<div class="dropdown" data-options="${esc(opts.options.join('|'))}" data-default="${esc(opts.defaultLabel ?? '')}" ${labels ? `data-labels="${esc(labels)}"` : ''} ${opts.raw ? 'data-raw="1"' : ''} ${opts.title ? `title="${esc(opts.title)}"` : ''}>
         <input type="hidden" name="${name}" value="${esc(value ?? '')}">
         <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">${esc(optionLabel(value ?? '', owner))}</button>
       </div>`
@@ -819,15 +828,24 @@ function runButtons(p, busy) {
         <input type="checkbox" id="act-cams" ${cams ? 'checked' : ''} ${p.running || busy ? 'disabled' : ''}> Cameras</label>`;
   return button + flatBox + camBox + box;
 }
+
+/** A WebXR headset app does not run on the host: its build opens in the browser (WebXR where the browser has it). */
+function headsetButtons(p) {
+  return `<button id="act-open" class="primary go" ${p.entryExists ? 'title="Open the build in a browser tab: one view on the desktop; Enter starts a session in a browser with WebXR"' : 'disabled title="Build the app first"'}>Open in browser</button>`;
+}
+
+/** Whether a project is built for a WebXR headset (manifest `target`; unset = the host). */
+const isHeadset = (m) => m?.target === 'webxr';
 /**
  * A role selector: the providers the built host offers for the role (built-ins and plugins, from
  * `xrb-host --list-plugins`); the platform also lists the platforms a packager plugin packages for.
  * A name the project uses but the host lacks stays selectable (marked missing), so nothing is lost.
  */
-function roleField(label, role, value, defaultLabel) {
+function roleField(label, role, value, defaultLabel, headset = false) {
   const l = state.plugins;
-  const names = new Set((l?.providers ?? []).filter((x) => x.role === role && x.name !== defaultLabel).map((x) => x.name));
-  if (role === 'platform') for (const n of l?.packagers ?? []) names.add(n);
+  // A headset app has no host providers: its platforms are the packagers building for headsets.
+  const names = new Set(headset ? [] : (l?.providers ?? []).filter((x) => x.role === role && x.name !== defaultLabel).map((x) => x.name));
+  if (role === 'platform') for (const n of (headset ? l?.headsetPlatforms : l?.packagers) ?? []) names.add(n);
   const missing = value && !names.has(value) && value !== defaultLabel;
   if (value) names.add(value);
   const describe = (l?.providers ?? []).filter((x) => x.role === role).map((x) => `${x.name}: ${x.description}${x.builtin ? ' (built in)' : ''}`).join('\n');
@@ -926,9 +944,10 @@ function renderDetail(force = false) {
     return;
   }
   const pkg = identity(m);
+  const headset = isHeadset(m);
   const actions = `<div class="actions">
       <div class="act"><div class="row">
-        ${runButtons(p, busy)}</div></div>
+        ${headset ? headsetButtons(p) : runButtons(p, busy)}</div></div>
       <div class="act"><div class="row">
         <button id="act-web" ${m.scripts?.build ? '' : 'disabled title="no build script"'}>Build</button>
         ${p.entryExists ? `<span class="state ok">built ${ago(p.webBuildMs)}</span>` : `<span class="state none">${esc(m.entry ?? '')} has no index.html yet</span>`}</div></div>
@@ -937,11 +956,15 @@ function renderDetail(force = false) {
   const settings = `<form id="settings">
       <div class="grid3">
         ${field('Title', 'name', m.name)}
-        ${roleField('Display', 'display', m.display, 'desktop')}
-        ${roleField('Input', 'input', m.input, 'none')}
+        ${m.kind === 'app' ? field('Target', 'target', m.target ?? '', {
+          options: ['', 'webxr'], defaultLabel: 'Host', labels: { webxr: 'WebXR headset' },
+          title: 'Host: xrb-host on a display, with display, input and platform providers.\nWebXR headset: a standalone headset runs the app in its browser engine, with its own hand tracking; no host.',
+        }) : ''}
+        ${headset ? '' : roleField('Display', 'display', m.display, 'desktop')}
+        ${headset ? '' : roleField('Input', 'input', m.input, 'none')}
       </div>
       <div class="grid3">
-        ${m.kind === 'app' ? roleField('Platform', 'platform', m.platform, 'standalone') : ''}
+        ${m.kind === 'app' ? roleField('Platform', 'platform', m.platform, 'standalone', headset) : ''}
         ${identityFields(p)}
       </div>
       <span class="field-error">${esc(state.fieldErrors[''] ?? '')}</span>
@@ -975,6 +998,7 @@ function renderDetail(force = false) {
   });
   $('#act-cams')?.addEventListener('change', (e) => localStorage.setItem(`panel.cams.${p.id}`, e.target.checked ? '1' : '0'));
   $('#act-stop')?.addEventListener('click', action(() => api('POST', '/api/run/stop')));
+  $('#act-open')?.addEventListener('click', () => window.open(`/preview/${p.id}/`, '_blank', 'noopener'));
   syncRunDock(p);
   // Saved without a button: "change" fires when a select gets a new value, and for the title
   // on Enter or when it loses focus (not per keystroke: a half-typed title would reach a package).
@@ -995,7 +1019,7 @@ async function saveSettings(p, form) {
   const m = structuredClone(p.manifest);
   const oldName = m.name;
   m.name = get('name');
-  for (const role of ['display', 'input', 'platform']) if (form.has(role)) m[role] = opt(role);
+  for (const role of ['target', 'display', 'input', 'platform']) if (form.has(role)) m[role] = opt(role);
   for (const [k, v] of form.entries()) {
     const at = /^plugins\.([^.]+)\.(.+)$/.exec(k);
     if (!at) continue;
